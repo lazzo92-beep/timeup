@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://p.trellocdn.com 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; connect-src 'self' https://api.trello.com https://trello.com; img-src 'self' data: https:; font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com data:;" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <title>TimeUp - Card Section</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles/card-section.css" />
+  </head>
+  <body>
+    <div class="timer-section">
+      <!-- Timer Header -->
+      <div class="timer-header">
+        <button class="btn-toggle" id="btn-toggle" title="Start Timer">
+          <svg id="icon-play" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+          <svg id="icon-stop" viewBox="0 0 24 24" hidden>
+            <path d="M6 6h12v12H6z" />
+          </svg>
+          <span id="btn-text">Start</span>
+        </button>
+        <div class="timer-display timer-display--idle" id="display">
+          00:00:00
+        </div>
+        <input
+          type="text"
+          class="timer-description"
+          id="timer-description"
+          placeholder="What are you working on?"
+          aria-label="Timer description"
+          maxlength="120"
+          hidden
+        />
+        <div class="timer-info">
+          <span class="timer-total" id="total"></span>
+          <span class="timer-remaining" id="remaining" hidden></span>
+        </div>
+      </div>
+
+      <!-- Estimate & Progress -->
+      <div class="estimate-row" id="estimate-row">
+        <span class="estimate-label">Estimate:</span>
+        <input
+          type="text"
+          class="estimate-input"
+          id="estimate-input"
+          placeholder="e.g. 2h 30m"
+          aria-label="Time estimate"
+        />
+        <button class="btn-small" id="btn-set-estimate">Set</button>
+        <span class="estimate-display" id="estimate-display" hidden></span>
+        <button
+          class="btn-small btn-small--clear"
+          id="btn-clear-estimate"
+          hidden
+        >
+          Clear
+        </button>
+      </div>
+
+      <div class="progress-bar" id="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
+        <div class="progress-bar__fill" id="progress-fill"></div>
+      </div>
+
+      <!-- Lists -->
+      <div class="entries-list" id="entries"></div>
+      <div class="checklists-container" id="checklists-container" hidden></div>
+
+      <!-- Auth UI -->
+      <div class="auth-container" id="auth-container" hidden>
+        <p class="auth-text">Allow access to load checklists correctly.</p>
+        <button class="btn-small" id="btn-authorize">Authorize Trello</button>
+      </div>
+
+      <!-- Time Picker Overlay -->
+      <div id="time-picker-container" hidden></div>
+    </div>
+
+    <script src="https://p.trellocdn.com/power-up.min.js"></script>
+    <script type="module">
+      import StorageService from "../src/services/StorageService.js";
+      import ChecklistService from "../src/services/ChecklistService.js";
+      import TrelloService from "../src/services/TrelloService.js";
+      import { AppConfig } from "../src/config/AppConfig.js";
+      import { TIMER_STATE } from "../src/utils/constants.js";
+
+      // UI Controllers
+      import { TimerUI } from "../src/ui/TimerUI.js";
+      import { EstimateUI } from "../src/ui/EstimateUI.js";
+      import { ChecklistUI } from "../src/ui/ChecklistUI.js";
+      import { EntryListUI } from "../src/ui/EntryListUI.js";
+      import { AuthUI } from "../src/ui/AuthUI.js";
+      import { TimePickerUI } from "../src/ui/TimePickerUI.js";
+
+      const t = TrelloPowerUp.iframe({
+        appKey: AppConfig.APP_KEY,
+        appName: AppConfig.APP_NAME,
+      });
+
+      // -- Shared Components --
+      const timePicker = new TimePickerUI({
+        containerId: "time-picker-container",
+      });
+
+      // -- State --
+      let cachedChecklists = [];
+      let cachedBoardMembers = [];
+      let updateInterval = null;
+
+      // -- Initialize Controllers --
+
+      // 1. Timer Header
+      const timerUI = new TimerUI(
+        t,
+        {
+          display: document.getElementById("display"),
+          btnToggle: document.getElementById("btn-toggle"),
+          btnText: document.getElementById("btn-text"),
+          iconPlay: document.getElementById("icon-play"),
+          iconStop: document.getElementById("icon-stop"),
+          description: document.getElementById("timer-description"),
+          total: document.getElementById("total"),
+        },
+        {
+          onRefresh: () => refresh(),
+        },
+      );
+
+      // 2. Estimation & Progress
+      const estimateUI = new EstimateUI(
+        t,
+        {
+          row: document.getElementById("estimate-row"),
+          input: document.getElementById("estimate-input"),
+          btnSet: document.getElementById("btn-set-estimate"),
+          btnClear: document.getElementById("btn-clear-estimate"),
+          display: document.getElementById("estimate-display"),
+          progressBar: document.getElementById("progress-bar"),
+          progressFill: document.getElementById("progress-fill"),
+          remaining: document.getElementById("remaining"),
+        },
+        {
+          onRefresh: () => refresh(),
+          timePicker: timePicker,
+        },
+      );
+
+      // 3. Entry List
+      const entryListUI = new EntryListUI(t, "entries", {
+        onRefresh: () => refresh(),
+        getChecklists: () => cachedChecklists,
+        getBoardMembers: () => cachedBoardMembers,
+      });
+
+      // 4. Checklist Controls
+      const checklistUI = new ChecklistUI(t, "checklists-container", {
+        onRefresh: () => refresh(),
+        timePicker: timePicker,
+      });
+
+      // 5. Auth
+      const authUI = new AuthUI(t, {
+        authContainerId: "auth-container",
+        btnAuthorizeId: "btn-authorize",
+        onAuthorized: () => fullRefresh(),
+      });
+
+      // -- Main Loop --
+
+      const refresh = async () => {
+        try {
+          const timerData = await StorageService.getTimerData(t);
+
+          // Update UI Components
+          timerUI.update(timerData);
+          estimateUI.update(timerData);
+          entryListUI.render(timerData.recentEntries || []);
+          checklistUI.render(timerData, cachedChecklists);
+
+          // Conditional Interval Management
+          const isGlobalRunning = timerData.state === TIMER_STATE.RUNNING;
+          const { isRunning: isAnyItemRunning } =
+            ChecklistService.getRunningCheckItem(timerData);
+
+          if (isGlobalRunning || isAnyItemRunning) {
+            if (updateInterval) clearTimeout(updateInterval);
+            updateInterval = setTimeout(refresh, 1000);
+          } else {
+            if (updateInterval) {
+              clearTimeout(updateInterval);
+              updateInterval = null;
+            }
+          }
+
+          // Always resize to fit new content (like checklist items)
+          t.sizeTo("body").catch(() => {});
+        } catch (error) {
+          // Silent failure
+        }
+      };
+
+      const fullRefresh = async () => {
+        // 1. Fetch Checklists (Auth check handled inside service return)
+        const newChecklists = await ChecklistService.getChecklists(t);
+
+        // 2. Fetch Board Members
+        cachedBoardMembers = await TrelloService.getBoardMembers(t);
+
+        if (newChecklists === null) {
+          // Not Authorized
+          authUI.show();
+          checklistUI.render({}, []); // Clear checklists
+        } else {
+          authUI.hide();
+          cachedChecklists = newChecklists;
+          estimateUI.setChecklists(cachedChecklists);
+
+          // 3. Update UI
+          await refresh();
+
+          // Resize (safe approach)
+          t.sizeTo("body").catch(() => {});
+        }
+      };
+
+      // Initial Load
+      t.render(async () => {
+        await fullRefresh();
+      });
+    </script>
+  </body>
+</html>

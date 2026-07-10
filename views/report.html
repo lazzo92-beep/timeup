@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://p.trellocdn.com 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.trello.com https://trello.com; img-src 'self' data: https:; font-src 'self' data:;" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <title>TimeUp - Time Report</title>
+    <link rel="stylesheet" href="./styles/report.css" />
+  </head>
+  <body>
+    <main class="report-shell">
+      <header class="report-header">
+        <div>
+          <h1>Time Report</h1>
+          <p id="board-name">Loading board data...</p>
+        </div>
+        <div class="report-actions">
+          <button id="refresh" type="button">Refresh</button>
+          <button id="export-csv" type="button" disabled>Export CSV</button>
+        </div>
+      </header>
+
+      <section class="summary-grid" aria-label="Report summary">
+        <div class="summary-item">
+          <span class="summary-label">Cards with time</span>
+          <strong id="summary-cards">0</strong>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Tracked time</span>
+          <strong id="summary-time">0m</strong>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Estimated</span>
+          <strong id="summary-estimate">0m</strong>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Delta</span>
+          <strong id="summary-delta">0m</strong>
+        </div>
+      </section>
+
+      <section class="table-section">
+        <div id="status" class="status">Loading cards...</div>
+        <table class="report-table" aria-label="Tracked time by card">
+          <thead>
+            <tr>
+              <th>Card</th>
+              <th>List</th>
+              <th class="number">Tracked</th>
+              <th class="number">Estimate</th>
+              <th class="number">Delta</th>
+              <th class="number">Entries</th>
+            </tr>
+          </thead>
+          <tbody id="report-rows"></tbody>
+        </table>
+      </section>
+    </main>
+
+    <script src="https://p.trellocdn.com/power-up.min.js"></script>
+    <script type="module">
+      import { AppConfig } from "../src/config/AppConfig.js";
+      import { formatDuration } from "../src/utils/formatTime.js";
+
+      const t = TrelloPowerUp.iframe({
+        appKey: AppConfig.APP_KEY,
+        appName: AppConfig.APP_NAME,
+      });
+
+      const elements = {
+        boardName: document.getElementById("board-name"),
+        status: document.getElementById("status"),
+        rows: document.getElementById("report-rows"),
+        refresh: document.getElementById("refresh"),
+        exportCsv: document.getElementById("export-csv"),
+        summaryCards: document.getElementById("summary-cards"),
+        summaryTime: document.getElementById("summary-time"),
+        summaryEstimate: document.getElementById("summary-estimate"),
+        summaryDelta: document.getElementById("summary-delta"),
+      };
+
+      let reportRows = [];
+
+      const escapeHtml = (value) =>
+        String(value ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+
+      const formatReportDuration = (ms) =>
+        formatDuration(Math.max(0, ms || 0), {
+          compact: true,
+          showSeconds: false,
+          showDays: true,
+        });
+
+      const formatSignedDuration = (ms) => {
+        if (!ms) return "0m";
+        const sign = ms > 0 ? "+" : "-";
+        return `${sign}${formatReportDuration(Math.abs(ms))}`;
+      };
+
+      const buildListNameMap = async () => {
+        const lists = await t.lists("id", "name");
+        return new Map((lists || []).map((list) => [list.id, list.name]));
+      };
+
+      const readCardTimerData = async (cardId) => {
+        try {
+          return await t.get(cardId, "shared", "timerData", null);
+        } catch (error) {
+          return null;
+        }
+      };
+
+      const buildReport = async () => {
+        elements.status.textContent = "Loading cards...";
+        elements.refresh.disabled = true;
+        elements.exportCsv.disabled = true;
+        elements.rows.innerHTML = "";
+
+        try {
+          const [board, cards, listNames] = await Promise.all([
+            t.board("name"),
+            t.cards("id", "name", "url", "idList"),
+            buildListNameMap(),
+          ]);
+
+          elements.boardName.textContent = board?.name || "Current board";
+
+          const rows = [];
+          for (const card of cards || []) {
+            const timerData = await readCardTimerData(card.id);
+            const totalTime = Number(timerData?.totalTime || 0);
+            const estimatedTime = Number(timerData?.estimatedTime || 0);
+            const checklistTotals = Object.values(
+              timerData?.checklistTotals || {},
+            );
+            const checklistEntries = checklistTotals.reduce(
+              (sum, item) => sum + Number(item?.entryCount || 0),
+              0,
+            );
+            const recentEntries = Array.isArray(timerData?.recentEntries)
+              ? timerData.recentEntries.length
+              : 0;
+
+            if (totalTime <= 0 && estimatedTime <= 0) continue;
+
+            rows.push({
+              cardName: card.name,
+              cardUrl: card.url,
+              listName: listNames.get(card.idList) || "",
+              totalTime,
+              estimatedTime,
+              delta: totalTime - estimatedTime,
+              entryCount: Math.max(recentEntries, checklistEntries),
+            });
+          }
+
+          rows.sort((a, b) => b.totalTime - a.totalTime);
+          reportRows = rows;
+          renderReport(rows);
+        } catch (error) {
+          elements.status.textContent = "Could not load report data.";
+        } finally {
+          elements.refresh.disabled = false;
+          t.sizeTo("body").catch(() => {});
+        }
+      };
+
+      const renderReport = (rows) => {
+        const totalTime = rows.reduce((sum, row) => sum + row.totalTime, 0);
+        const totalEstimate = rows.reduce(
+          (sum, row) => sum + row.estimatedTime,
+          0,
+        );
+
+        elements.summaryCards.textContent = rows.length;
+        elements.summaryTime.textContent = formatReportDuration(totalTime);
+        elements.summaryEstimate.textContent =
+          formatReportDuration(totalEstimate);
+        elements.summaryDelta.textContent = formatSignedDuration(
+          totalTime - totalEstimate,
+        );
+
+        if (!rows.length) {
+          elements.status.textContent = "No tracked time found on visible cards.";
+          elements.rows.innerHTML = "";
+          return;
+        }
+
+        elements.status.textContent = "";
+        elements.exportCsv.disabled = false;
+        elements.rows.innerHTML = rows
+          .map(
+            (row) => `
+              <tr>
+                <td>
+                  <a href="${escapeHtml(row.cardUrl)}" target="_blank" rel="noreferrer">${escapeHtml(row.cardName)}</a>
+                </td>
+                <td>${escapeHtml(row.listName)}</td>
+                <td class="number">${escapeHtml(formatReportDuration(row.totalTime))}</td>
+                <td class="number">${escapeHtml(formatReportDuration(row.estimatedTime))}</td>
+                <td class="number ${row.delta > 0 ? "over" : "under"}">${escapeHtml(formatSignedDuration(row.delta))}</td>
+                <td class="number">${escapeHtml(row.entryCount)}</td>
+              </tr>
+            `,
+          )
+          .join("");
+      };
+
+      const csvValue = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+
+      const exportCsv = () => {
+        const header = [
+          "Card",
+          "List",
+          "Tracked",
+          "Tracked milliseconds",
+          "Estimate",
+          "Estimate milliseconds",
+          "Delta",
+          "Card URL",
+        ];
+        const lines = [
+          header.map(csvValue).join(","),
+          ...reportRows.map((row) =>
+            [
+              row.cardName,
+              row.listName,
+              formatReportDuration(row.totalTime),
+              row.totalTime,
+              formatReportDuration(row.estimatedTime),
+              row.estimatedTime,
+              formatSignedDuration(row.delta),
+              row.cardUrl,
+            ]
+              .map(csvValue)
+              .join(","),
+          ),
+        ];
+
+        const blob = new Blob([lines.join("\n")], {
+          type: "text/csv;charset=utf-8",
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `timeup-report-${new Date().toISOString().slice(0, 10)}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      };
+
+      elements.refresh.addEventListener("click", buildReport);
+      elements.exportCsv.addEventListener("click", exportCsv);
+
+      t.render(buildReport);
+    </script>
+  </body>
+</html>

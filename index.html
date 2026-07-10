@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://p.trellocdn.com 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.trello.com https://trello.com; img-src 'self' data: https:; font-src 'self' data:;" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <title>TimeUp - Trello Power-Up</title>
+    <link rel="stylesheet" href="./styles/variables.css" />
+    <link rel="stylesheet" href="./styles/landing.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⏱️</text></svg>"
+    />
+  </head>
+  <body>
+    <div id="landing" class="landing">
+      <h1 class="landing__title">⏱️ TimeUp</h1>
+      <p class="landing__subtitle">
+        A Trello Power-Up for Time Tracking
+      </p>
+      <p class="landing__info">
+        To use this Power-Up, add it to your Trello board via<br />
+        <strong>Power-Ups → Custom → Add</strong>
+      </p>
+      <a
+        href="https://trello.com/power-ups/admin"
+        target="_blank"
+        class="landing__link"
+        >Open Power-Up Admin</a
+      >
+    </div>
+
+    <script src="https://p.trellocdn.com/power-up.min.js"></script>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

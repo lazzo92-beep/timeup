@@ -1,0 +1,17 @@
+[build]
+  publish = "."
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # HSTS - Force HTTPS for 1 year
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains; preload"
+    
+    # CSP - Content Security Policy for Trello Power-Up
+    Content-Security-Policy = "default-src 'self'; script-src 'self' https://p.trellocdn.com https://api.trello.com 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.trello.com https://trello.com; frame-ancestors https://trello.com https://*.trello.com; img-src 'self' data: https:; font-src 'self'"
+    
+    # Additional security headers
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "ALLOW-FROM https://trello.com"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(), microphone=(), camera=()"

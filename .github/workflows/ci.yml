@@ -1,0 +1,276 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop, "feature/**"]
+  pull_request:
+    branches: [main, develop]
+
+# Restrict permissions to read-only by default
+permissions:
+  contents: read
+
+# Prevent concurrent runs on the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test & Coverage
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
+
+      - name: Check coverage thresholds
+        run: |
+          echo "Verifying coverage meets 90% threshold..."
+          npm run test:coverage 2>&1 | tee coverage-output.txt
+
+          # Extract coverage percentages
+          STATEMENTS=$(grep "Statements" coverage-output.txt | grep -oP '\d+\.\d+' | head -1)
+          BRANCHES=$(grep "Branches" coverage-output.txt | grep -oP '\d+\.\d+' | head -1)
+          FUNCTIONS=$(grep "Functions" coverage-output.txt | grep -oP '\d+\.\d+' | head -1)
+          LINES=$(grep "Lines" coverage-output.txt | grep -oP '\d+\.\d+' | head -1)
+
+          echo "Coverage Results:"
+          echo "  Statements: ${STATEMENTS}%"
+          echo "  Branches: ${BRANCHES}%"
+          echo "  Functions: ${FUNCTIONS}%"
+          echo "  Lines: ${LINES}%"
+
+          # Thresholds will be checked by Jest config
+          if grep -q "Coverage threshold" coverage-output.txt; then
+            echo "❌ Coverage thresholds not met!"
+            exit 1
+          fi
+
+          echo "✅ All coverage thresholds met!"
+
+      - name: Upload coverage reports to Codecov
+        if: matrix.node-version == '20.x'
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage/coverage-final.json
+          flags: unittests
+          name: codecov-timeup
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Archive coverage report
+        if: matrix.node-version == '20.x'
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 30
+
+  lint:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20.x"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check file structure
+        run: |
+          echo "Checking project structure..."
+
+          # Check for required directories
+          for dir in src tests styles views; do
+            if [ ! -d "$dir" ]; then
+              echo "❌ Missing required directory: $dir"
+              exit 1
+            fi
+          done
+
+          # Check for required files
+          for file in index.html package.json jest.config.js README.md; do
+            if [ ! -f "$file" ]; then
+              echo "❌ Missing required file: $file"
+              exit 1
+            fi
+          done
+
+          echo "✅ Project structure is valid"
+
+      - name: Check for console.log statements
+        run: |
+          echo "Checking for console.log statements..."
+
+          # Allow console.warn, console.error, but flag console.log
+          if grep -r "console\.log(" src/ --exclude-dir=node_modules; then
+            echo "⚠️  Warning: Found console.log statements in src/"
+            echo "Please use console.warn() or console.error() instead"
+            # Don't fail CI, just warn
+          else
+            echo "✅ No console.log statements found"
+          fi
+
+      - name: Check for TODOs and FIXMEs
+        run: |
+          echo "Checking for TODO/FIXME comments..."
+
+          TODO_COUNT=$(grep -r "TODO\|FIXME" src/ tests/ --exclude-dir=node_modules | wc -l || echo "0")
+
+          if [ "$TODO_COUNT" -gt 0 ]; then
+            echo "ℹ️  Found $TODO_COUNT TODO/FIXME comments:"
+            grep -rn "TODO\|FIXME" src/ tests/ --exclude-dir=node_modules || true
+          else
+            echo "✅ No TODO/FIXME comments found"
+          fi
+
+      - name: Validate JSON files
+        run: |
+          echo "Validating JSON files..."
+
+          for file in package.json jest.config.js; do
+            if [ -f "$file" ]; then
+              node -e "require('./$file')" 2>/dev/null && echo "✅ $file is valid" || {
+                echo "❌ $file is invalid JSON"
+                exit 1
+              }
+            fi
+          done
+
+      - name: Check dependencies for vulnerabilities
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+  validate-pr:
+    name: Validate Pull Request
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check PR title format
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          # Check for conventional commit format
+          if echo "$PR_TITLE" | grep -qE "^(feat|fix|docs|style|refactor|test|chore|perf)(\(.+\))?: .+"; then
+            echo "✅ PR title follows conventional commit format"
+          else
+            echo "⚠️  PR title should follow conventional commit format:"
+            echo "   feat: add new feature"
+            echo "   fix: bug fix"
+            echo "   docs: documentation changes"
+            echo "   style: code style changes"
+            echo "   refactor: code refactoring"
+            echo "   test: test changes"
+            echo "   chore: maintenance tasks"
+          fi
+
+      - name: Check branch naming
+        env:
+          BRANCH_NAME: ${{ github.head_ref }}
+        run: |
+          if echo "$BRANCH_NAME" | grep -qE "^(feature|bugfix|hotfix|docs|refactor|test|chore)/[a-z0-9-]+$"; then
+            echo "✅ Branch name follows convention: $BRANCH_NAME"
+          else
+            echo "⚠️  Branch name should follow convention:"
+            echo "   feature/description"
+            echo "   bugfix/description"
+            echo "   hotfix/description"
+            echo "   Current: $BRANCH_NAME"
+          fi
+
+      - name: Check file changes
+        run: |
+          echo "Files changed in this PR:"
+          git diff --name-only origin/${{ github.base_ref }}...HEAD
+
+          # Check if critical files were modified
+          CRITICAL_FILES="package.json jest.config.js"
+
+          for file in $CRITICAL_FILES; do
+            if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -q "^$file$"; then
+              echo "⚠️  Critical file modified: $file"
+              echo "Please ensure you've reviewed the changes carefully"
+            fi
+          done
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20.x"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
+
+      - name: Check for secrets in code
+        run: |
+          echo "Scanning for potential secrets..."
+
+          # Check for common secret patterns
+          PATTERNS=(
+            "password\s*=\s*['\"][^'\"]*['\"]"
+            "api[_-]?key\s*=\s*['\"][^'\"]*['\"]"
+            "secret\s*=\s*['\"][^'\"]*['\"]"
+            "token\s*=\s*['\"][^'\"]*['\"]"
+            "['\"][A-Za-z0-9]{32,}['\"]"
+          )
+
+          FOUND=0
+          for pattern in "${PATTERNS[@]}"; do
+            if grep -rE "$pattern" src/ tests/ --exclude-dir=node_modules 2>/dev/null; then
+              FOUND=1
+            fi
+          done
+
+          if [ $FOUND -eq 1 ]; then
+            echo "⚠️  Found potential secrets in code!"
+            echo "Please ensure no actual secrets are committed"
+          else
+            echo "✅ No obvious secrets detected"
+          fi

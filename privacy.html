@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TimeUp - Privacy Policy</title>
+    <link rel="stylesheet" href="./styles/variables.css" />
+    <link rel="stylesheet" href="./styles/landing.css" />
+  </head>
+  <body class="privacy">
+    <div class="privacy__container">
+      <h1 class="privacy__title">Privacy Policy</h1>
+      <p class="privacy__updated">Last updated: January 29, 2026</p>
+
+      <h2 class="privacy__section-title">Overview</h2>
+      <p>
+        TimeUp is a Trello Power-Up that provides time tracking functionality
+        within Trello boards. This policy describes how TimeUp handles data.
+      </p>
+
+      <h2 class="privacy__section-title">No External Data Collection</h2>
+      <p>
+        TimeUp does not collect, transmit, or store any data on external
+        servers. The Power-Up operates entirely within your browser and uses
+        only Trello's built-in storage API. There are no analytics, tracking
+        cookies, or third-party services.
+      </p>
+
+      <h2 class="privacy__section-title">Data Storage Within Trello</h2>
+      <p>
+        All data is stored using Trello's Power-Up storage system, which keeps
+        data within your Trello workspace. The following information is stored:
+      </p>
+
+      <h3 class="privacy__subsection-title">
+        Card-Level Data (Shared with all card members)
+      </h3>
+      <ul>
+        <li>
+          <strong>Time entries:</strong> Start time, end time, duration, and
+          optional descriptions
+        </li>
+        <li>
+          <strong>Timer state:</strong> Whether a timer is currently running,
+          paused, or idle
+        </li>
+        <li>
+          <strong>Time estimates:</strong> Manual or calculated estimates for
+          tasks
+        </li>
+        <li>
+          <strong>Checklist item timers:</strong> Individual timer states for
+          checklist items
+        </li>
+      </ul>
+
+      <h3 class="privacy__subsection-title">
+        Board-Level Settings (Shared across board)
+      </h3>
+      <ul>
+        <li><strong>Hourly rate:</strong> Optional billing rate for reports</li>
+        <li><strong>Currency:</strong> Display currency preference</li>
+        <li><strong>Categories:</strong> Custom time entry categories</li>
+      </ul>
+
+      <h3 class="privacy__subsection-title">
+        User-Level Preferences (Private to you)
+      </h3>
+      <ul>
+        <li>
+          <strong>Display format:</strong> Show seconds, 12/24-hour format
+        </li>
+        <li><strong>Behavior settings:</strong> Auto-start preferences</li>
+      </ul>
+
+      <h2 class="privacy__section-title">Trello API Access (Optional)</h2>
+      <p>
+        TimeUp requests optional <strong>Read-Only Access</strong> to your
+        Trello boards via the Trello REST API. This authorization is used
+        exclusively to:
+      </p>
+      <ul>
+        <li>
+          Fetch complete checklist item details (standard Power-Up API has
+          limitations)
+        </li>
+        <li>Calculate progress based on checklist completion</li>
+      </ul>
+      <p>
+        <strong>You can decline this authorization</strong> and TimeUp will
+        continue to work with basic checklist functionality. This access is
+        read-only and does not modify your boards or cards.
+      </p>
+
+      <h2 class="privacy__section-title">Personal Information</h2>
+      <p>
+        TimeUp does not access, store, or process any personal identifying
+        information such as names, email addresses, or contact details. All
+        stored data consists solely of timestamps, durations, and user-provided
+        task descriptions.
+      </p>
+
+      <h2 class="privacy__section-title">Data Deletion</h2>
+      <p>
+        To remove all TimeUp data from a card, simply delete the time entries
+        within the Power-Up interface. To remove all data from a board, disable
+        the TimeUp Power-Up from that board.
+      </p>
+
+      <h2 class="privacy__section-title">Changes to This Policy</h2>
+      <p>
+        Any changes to this privacy policy will be reflected on this page with
+        an updated revision date.
+      </p>
+
+      <h2 class="privacy__section-title">Contact</h2>
+      <p>
+        For questions about this privacy policy, please open an issue on our
+        <a href="https://github.com/nikiitin/TimeUp">GitHub repository</a>.
+      </p>
+    </div>
+  </body>
+</html>

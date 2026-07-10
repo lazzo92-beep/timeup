@@ -1,0 +1,18 @@
+# Code Owners for TimeUp
+# These owners will be automatically requested for review when PRs modify matching files
+
+# Default owners for everything in the repo
+*       @vnicolas
+
+# Service layer (critical business logic)
+/src/services/                  @vnicolas
+/tests/services/                @vnicolas
+
+# Configuration files (require careful review)
+/jest.config.js                 @vnicolas
+/package.json                   @vnicolas
+/.github/workflows/             @vnicolas
+
+# Documentation
+/README.md                      @vnicolas
+/.github/                       @vnicolas

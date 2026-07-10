@@ -1,0 +1,160 @@
+name: Weekly Maintenance
+
+on:
+  schedule:
+    # Run every Monday at 9:00 AM UTC
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+# Restrict permissions to read-only by default
+permissions:
+  contents: read
+
+jobs:
+  dependency-check:
+    name: Check for Dependency Updates
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20.x"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check for outdated packages
+        run: |
+          echo "Checking for outdated packages..."
+          npm outdated || true
+
+      - name: Security audit
+        run: |
+          echo "Running security audit..."
+          npm audit --audit-level=moderate || true
+
+      - name: Create summary
+        run: |
+          echo "## Weekly Maintenance Report" > maintenance-report.md
+          echo "**Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> maintenance-report.md
+          echo "" >> maintenance-report.md
+
+          echo "### Outdated Packages" >> maintenance-report.md
+          npm outdated >> maintenance-report.md 2>&1 || echo "All packages up to date" >> maintenance-report.md
+          echo "" >> maintenance-report.md
+
+          echo "### Security Audit" >> maintenance-report.md
+          npm audit >> maintenance-report.md 2>&1 || echo "No vulnerabilities found" >> maintenance-report.md
+
+          cat maintenance-report.md
+
+      - name: Upload report
+        uses: actions/upload-artifact@v6
+        with:
+          name: maintenance-report
+          path: maintenance-report.md
+          retention-days: 90
+
+  coverage-trend:
+    name: Track Coverage Trend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20.x"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate coverage report
+        run: npm run test:coverage
+
+      - name: Extract coverage metrics
+        run: |
+          echo "## Coverage Report" > coverage-trend.md
+          echo "**Date:** $(date -u '+%Y-%m-%d')" >> coverage-trend.md
+          echo "" >> coverage-trend.md
+
+          npm run test:coverage 2>&1 | grep -A 5 "Coverage summary" >> coverage-trend.md
+
+          cat coverage-trend.md
+
+      - name: Upload coverage trend
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage-trend
+          path: coverage-trend.md
+          retention-days: 365
+
+  test-stability:
+    name: Test Stability Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20.x"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests 10 times
+        run: |
+          echo "Running stability test (10 iterations)..."
+
+          SUCCESS=0
+          FAILURE=0
+
+          for i in {1..10}; do
+            echo "Iteration $i/10..."
+            if npm test > test-run-$i.log 2>&1; then
+              SUCCESS=$((SUCCESS + 1))
+              echo "✅ Pass"
+            else
+              FAILURE=$((FAILURE + 1))
+              echo "❌ Fail"
+            fi
+          done
+
+          echo "" >> test-stability.md
+          echo "## Test Stability Report" > test-stability.md
+          echo "**Date:** $(date -u '+%Y-%m-%d')" >> test-stability.md
+          echo "" >> test-stability.md
+          echo "**Success Rate:** $SUCCESS/10 (${SUCCESS}0%)" >> test-stability.md
+          echo "**Failures:** $FAILURE/10" >> test-stability.md
+
+          cat test-stability.md
+
+          # Fail if less than 90% success rate
+          if [ $SUCCESS -lt 9 ]; then
+            echo "❌ Test stability below 90%!"
+            exit 1
+          fi
+
+          echo "✅ Test stability check passed!"
+
+      - name: Upload stability report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-stability-report
+          path: |
+            test-stability.md
+            test-run-*.log
+          retention-days: 90

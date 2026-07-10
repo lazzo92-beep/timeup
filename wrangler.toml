@@ -1,0 +1,5 @@
+name = "timeuptrello"
+compatibility_date = "2026-01-29"
+
+[assets]
+directory = "."
