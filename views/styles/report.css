@@ -128,6 +128,29 @@ a:hover {
   overflow: hidden;
 }
 
+.detail-section {
+  margin-top: 18px;
+}
+
+.section-heading {
+  align-items: center;
+  border-bottom: 1px solid #dcdfe4;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 14px 16px;
+}
+
+.section-heading h2 {
+  font-size: 16px;
+  margin: 0;
+}
+
+.section-heading span {
+  color: #626f86;
+  font-size: 13px;
+}
+
 .status {
   color: #626f86;
   min-height: 20px;
