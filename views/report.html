@@ -85,33 +85,12 @@
         </table>
       </section>
 
-      <section class="manual-import">
-        <div class="manual-import__header">
-          <h2>Manual Insert</h2>
-          <label class="manual-import__overwrite">
-            <input id="import-overwrite" type="checkbox" />
-            Overwrite existing new data
-          </label>
-        </div>
-        <textarea
-          id="import-input"
-          rows="5"
-          placeholder="Card URL or ID, tracked time, estimate, date, note&#10;https://trello.com/c/abc123/card-name, 2h 30m, 3h, 2026-07-01, Legacy import"
-        ></textarea>
-        <div class="manual-import__actions">
-          <button id="import-data" type="button">Insert Rows</button>
-          <span id="import-status"></span>
-        </div>
-      </section>
     </main>
 
     <script src="https://p.trellocdn.com/power-up.min.js"></script>
     <script type="module">
       import { AppConfig } from "../src/config/AppConfig.js";
-      import {
-        formatDuration,
-        parseTimeString,
-      } from "../src/utils/formatTime.js";
+      import { formatDuration } from "../src/utils/formatTime.js";
 
       const t = TrelloPowerUp.iframe({
         appKey: AppConfig.APP_KEY,
@@ -128,10 +107,6 @@
         dateTo: document.getElementById("date-to"),
         refresh: document.getElementById("refresh"),
         exportCsv: document.getElementById("export-csv"),
-        importData: document.getElementById("import-data"),
-        importInput: document.getElementById("import-input"),
-        importOverwrite: document.getElementById("import-overwrite"),
-        importStatus: document.getElementById("import-status"),
         summaryCards: document.getElementById("summary-cards"),
         summaryTime: document.getElementById("summary-time"),
         summaryEstimate: document.getElementById("summary-estimate"),
@@ -241,61 +216,6 @@
         } catch (error) {
           return null;
         }
-      };
-
-      const writeCardTimerData = async (cardId, timerData) => {
-        await t.set(cardId, "shared", "timerData", timerData);
-      };
-
-      const extractCardId = (value) => {
-        const trimmed = String(value || "").trim();
-        if (!trimmed) return "";
-        const shortLinkMatch = trimmed.match(/trello\.com\/c\/([^/?#]+)/i);
-        return shortLinkMatch ? shortLinkMatch[1] : trimmed;
-      };
-
-      const parseImportLine = (line) => {
-        const parts = line.split(",").map((part) => part.trim());
-        const [cardRef, trackedRaw, estimateRaw = "", dateRaw = "", ...noteParts] =
-          parts;
-        const totalTime = parseTimeString(trackedRaw);
-        const estimatedTime = estimateRaw ? parseTimeString(estimateRaw) : null;
-        const importDate = dateRaw ? new Date(`${dateRaw}T12:00:00`) : new Date();
-
-        return {
-          cardId: extractCardId(cardRef),
-          totalTime,
-          estimatedTime,
-          importTime: Number.isFinite(importDate.getTime())
-            ? importDate.getTime()
-            : Date.now(),
-          note: noteParts.join(", ").trim(),
-        };
-      };
-
-      const buildInsertedTimerData = (row) => {
-        const now = row.importTime || Date.now();
-        const startTime = now - row.totalTime;
-        const entry = {
-          id: `import_${now.toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-          startTime,
-          endTime: now,
-          duration: row.totalTime,
-          description: row.note || "Legacy import",
-          createdAt: now,
-          checklistItemId: null,
-          memberId: null,
-        };
-
-        return {
-          state: "idle",
-          currentEntry: null,
-          estimatedTime: row.estimatedTime,
-          manualEstimateSet: row.estimatedTime !== null && row.estimatedTime > 0,
-          totalTime: row.totalTime,
-          recentEntries: [entry],
-          checklistTotals: {},
-        };
       };
 
       const buildReport = async () => {
@@ -505,57 +425,8 @@
         URL.revokeObjectURL(url);
       };
 
-      const importManualRows = async () => {
-        const rawLines = elements.importInput.value
-          .split(/\r?\n/)
-          .map((line) => line.trim())
-          .filter(Boolean);
-
-        if (!rawLines.length) {
-          elements.importStatus.textContent = "Nothing to insert.";
-          return;
-        }
-
-        elements.importData.disabled = true;
-        elements.importStatus.textContent = "Inserting...";
-
-        let inserted = 0;
-        let skipped = 0;
-        let failed = 0;
-
-        for (const line of rawLines) {
-          try {
-            const row = parseImportLine(line);
-            if (!row.cardId || !row.totalTime) {
-              failed += 1;
-              continue;
-            }
-
-            const existing = await readCardTimerData(row.cardId);
-            const hasExistingData =
-              Number(existing?.totalTime || 0) > 0 ||
-              Number(existing?.estimatedTime || 0) > 0;
-
-            if (hasExistingData && !elements.importOverwrite.checked) {
-              skipped += 1;
-              continue;
-            }
-
-            await writeCardTimerData(row.cardId, buildInsertedTimerData(row));
-            inserted += 1;
-          } catch (error) {
-            failed += 1;
-          }
-        }
-
-        elements.importStatus.textContent = `${inserted} inserted, ${skipped} skipped, ${failed} failed.`;
-        elements.importData.disabled = false;
-        await buildReport();
-      };
-
       elements.refresh.addEventListener("click", buildReport);
       elements.exportCsv.addEventListener("click", exportCsv);
-      elements.importData.addEventListener("click", importManualRows);
       elements.dateFrom.addEventListener("change", buildReport);
       elements.dateTo.addEventListener("change", buildReport);
 
