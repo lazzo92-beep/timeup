@@ -8,8 +8,6 @@ import { getElapsedTime } from "../utils/formatTime.js";
 import StorageService from "./StorageService.js";
 import TrelloService from "./TrelloService.js";
 
-const MAX_RECENT_ENTRIES = 5;
-
 /**
  * Creates a new time entry.
  * @param {number} startTime - Start timestamp
@@ -44,14 +42,13 @@ const createEntry = (
 };
 
 /**
- * Adds an entry to recent entries (max 5, newest first).
+ * Adds an entry to the card history, newest first.
  * @param {Array} recentEntries - Current recent entries
  * @param {Object} newEntry - New entry to add
  * @returns {Array} Updated recent entries
  */
 const addToRecentEntries = (recentEntries, newEntry) => {
-  const updated = [newEntry, ...recentEntries];
-  return updated.slice(0, MAX_RECENT_ENTRIES);
+  return [newEntry, ...recentEntries];
 };
 
 /**

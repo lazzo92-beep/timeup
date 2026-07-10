@@ -154,7 +154,7 @@ Timer data is stored per-card using Trello's shared scope:
   estimatedTime: number | null,
   manualEstimateSet: boolean,
   totalTime: number,  // Aggregated total in milliseconds
-  recentEntries: [],  // Last 5 entries for display
+  recentEntries: [],  // Editable entry history for reporting
   checklistTotals: {} // Per-item aggregated times
 }
 ```

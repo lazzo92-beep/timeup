@@ -75,7 +75,7 @@ export const DEFAULTS = {
     // Aggregated total time - ONE number for all time tracked
     totalTime: 0,
 
-    // Only keep last 5 entries for display/editing
+    // Full editable entry history for reporting and manual adjustments
     recentEntries: [],
 
     // Checklist item totals (aggregated, not individual entries)

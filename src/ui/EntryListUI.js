@@ -69,7 +69,10 @@ export class EntryListUI {
     this._buildItemNameCache();
     this._buildMemberCache();
 
-    const sorted = [...this.currentEntries].reverse();
+    const sorted = [...this.currentEntries].sort(
+      (a, b) =>
+        (b.startTime || b.createdAt || 0) - (a.startTime || a.createdAt || 0),
+    );
     const entriesHtml = sorted
       .map((entry) => {
         if (entry.id === this.editingId) {
@@ -80,7 +83,7 @@ export class EntryListUI {
       .join("");
 
     const html = `
-      <div class="entries-header">Recent History (last 5)</div>
+      <div class="entries-header">Time History</div>
       ${entriesHtml}
     `;
 
@@ -149,6 +152,10 @@ export class EntryListUI {
 
     return `
             <div class="entry entry--editing" data-id="${this._escape(entry.id)}">
+                 <div class="entry__edit-row">
+                    <span class="entry__edit-label">Date:</span>
+                    <input type="datetime-local" class="entry__edit-input" id="edit-date-input" value="${this._escape(this._toDateTimeLocal(entry.startTime || entry.createdAt))}">
+                 </div>
                  <div class="entry__edit-row">
                     <span class="entry__edit-label">Duration:</span>
                     <input type="text" class="entry__edit-input" id="edit-duration-input" value="${this._escape(formatDuration(entry.duration, { compact: true }))}">
@@ -229,6 +236,7 @@ export class EntryListUI {
   }
 
   async _handleSave() {
+    const dateInput = this.container.querySelector("#edit-date-input");
     const durationInput = this.container.querySelector("#edit-duration-input");
     const descInput = this.container.querySelector("#edit-desc-input");
     const checklistSelect = this.container.querySelector(
@@ -242,7 +250,16 @@ export class EntryListUI {
       return;
     }
 
+    const startTime = this._parseDateTimeLocal(dateInput.value);
+    if (!startTime) {
+      alert("Invalid date");
+      return;
+    }
+
     const updates = {
+      startTime,
+      endTime: startTime + ms,
+      createdAt: startTime + ms,
       duration: ms,
       description: descInput.value,
       checklistItemId: checklistSelect.value || null,
@@ -264,5 +281,17 @@ export class EntryListUI {
 
   _escape(str) {
     return escapeHtml(str ?? "");
+  }
+
+  _toDateTimeLocal(timestamp) {
+    const date = new Date(timestamp || Date.now());
+    if (isNaN(date.getTime())) return "";
+    const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+    return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+  }
+
+  _parseDateTimeLocal(value) {
+    const timestamp = new Date(value).getTime();
+    return Number.isFinite(timestamp) ? timestamp : null;
   }
 }
