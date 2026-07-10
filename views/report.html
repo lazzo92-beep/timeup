@@ -16,6 +16,14 @@
           <p id="board-name">Loading board data...</p>
         </div>
         <div class="report-actions">
+          <label>
+            From
+            <input id="date-from" type="date" />
+          </label>
+          <label>
+            To
+            <input id="date-to" type="date" />
+          </label>
           <button id="refresh" type="button">Refresh</button>
           <button id="export-csv" type="button" disabled>Export CSV</button>
         </div>
@@ -56,12 +64,34 @@
           <tbody id="report-rows"></tbody>
         </table>
       </section>
+
+      <section class="manual-import">
+        <div class="manual-import__header">
+          <h2>Manual Insert</h2>
+          <label class="manual-import__overwrite">
+            <input id="import-overwrite" type="checkbox" />
+            Overwrite existing new data
+          </label>
+        </div>
+        <textarea
+          id="import-input"
+          rows="5"
+          placeholder="Card URL or ID, tracked time, estimate, date, note&#10;https://trello.com/c/abc123/card-name, 2h 30m, 3h, 2026-07-01, Legacy import"
+        ></textarea>
+        <div class="manual-import__actions">
+          <button id="import-data" type="button">Insert Rows</button>
+          <span id="import-status"></span>
+        </div>
+      </section>
     </main>
 
     <script src="https://p.trellocdn.com/power-up.min.js"></script>
     <script type="module">
       import { AppConfig } from "../src/config/AppConfig.js";
-      import { formatDuration } from "../src/utils/formatTime.js";
+      import {
+        formatDuration,
+        parseTimeString,
+      } from "../src/utils/formatTime.js";
 
       const t = TrelloPowerUp.iframe({
         appKey: AppConfig.APP_KEY,
@@ -72,8 +102,14 @@
         boardName: document.getElementById("board-name"),
         status: document.getElementById("status"),
         rows: document.getElementById("report-rows"),
+        dateFrom: document.getElementById("date-from"),
+        dateTo: document.getElementById("date-to"),
         refresh: document.getElementById("refresh"),
         exportCsv: document.getElementById("export-csv"),
+        importData: document.getElementById("import-data"),
+        importInput: document.getElementById("import-input"),
+        importOverwrite: document.getElementById("import-overwrite"),
+        importStatus: document.getElementById("import-status"),
         summaryCards: document.getElementById("summary-cards"),
         summaryTime: document.getElementById("summary-time"),
         summaryEstimate: document.getElementById("summary-estimate"),
@@ -81,6 +117,7 @@
       };
 
       let reportRows = [];
+      let currentRange = { isActive: false };
 
       const escapeHtml = (value) =>
         String(value ?? "")
@@ -108,12 +145,99 @@
         return new Map((lists || []).map((list) => [list.id, list.name]));
       };
 
+      const getDateRange = () => {
+        const from = elements.dateFrom.value
+          ? new Date(`${elements.dateFrom.value}T00:00:00`).getTime()
+          : null;
+        const to = elements.dateTo.value
+          ? new Date(`${elements.dateTo.value}T23:59:59.999`).getTime()
+          : null;
+
+        return {
+          from: Number.isFinite(from) ? from : null,
+          to: Number.isFinite(to) ? to : null,
+          isActive: Number.isFinite(from) || Number.isFinite(to),
+        };
+      };
+
+      const isEntryInRange = (entry, range) => {
+        const timestamp = Number(entry?.startTime || entry?.createdAt || 0);
+        if (!timestamp) return false;
+        if (range.from !== null && timestamp < range.from) return false;
+        if (range.to !== null && timestamp > range.to) return false;
+        return true;
+      };
+
+      const getReportEntries = (timerData, range) => {
+        const entries = Array.isArray(timerData?.recentEntries)
+          ? timerData.recentEntries
+          : [];
+        return range.isActive
+          ? entries.filter((entry) => isEntryInRange(entry, range))
+          : entries;
+      };
+
       const readCardTimerData = async (cardId) => {
         try {
           return await t.get(cardId, "shared", "timerData", null);
         } catch (error) {
           return null;
         }
+      };
+
+      const writeCardTimerData = async (cardId, timerData) => {
+        await t.set(cardId, "shared", "timerData", timerData);
+      };
+
+      const extractCardId = (value) => {
+        const trimmed = String(value || "").trim();
+        if (!trimmed) return "";
+        const shortLinkMatch = trimmed.match(/trello\.com\/c\/([^/?#]+)/i);
+        return shortLinkMatch ? shortLinkMatch[1] : trimmed;
+      };
+
+      const parseImportLine = (line) => {
+        const parts = line.split(",").map((part) => part.trim());
+        const [cardRef, trackedRaw, estimateRaw = "", dateRaw = "", ...noteParts] =
+          parts;
+        const totalTime = parseTimeString(trackedRaw);
+        const estimatedTime = estimateRaw ? parseTimeString(estimateRaw) : null;
+        const importDate = dateRaw ? new Date(`${dateRaw}T12:00:00`) : new Date();
+
+        return {
+          cardId: extractCardId(cardRef),
+          totalTime,
+          estimatedTime,
+          importTime: Number.isFinite(importDate.getTime())
+            ? importDate.getTime()
+            : Date.now(),
+          note: noteParts.join(", ").trim(),
+        };
+      };
+
+      const buildInsertedTimerData = (row) => {
+        const now = row.importTime || Date.now();
+        const startTime = now - row.totalTime;
+        const entry = {
+          id: `import_${now.toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+          startTime,
+          endTime: now,
+          duration: row.totalTime,
+          description: row.note || "Legacy import",
+          createdAt: now,
+          checklistItemId: null,
+          memberId: null,
+        };
+
+        return {
+          state: "idle",
+          currentEntry: null,
+          estimatedTime: row.estimatedTime,
+          manualEstimateSet: row.estimatedTime !== null && row.estimatedTime > 0,
+          totalTime: row.totalTime,
+          recentEntries: [entry],
+          checklistTotals: {},
+        };
       };
 
       const buildReport = async () => {
@@ -123,6 +247,7 @@
         elements.rows.innerHTML = "";
 
         try {
+          const range = getDateRange();
           const [board, cards, listNames] = await Promise.all([
             t.board("name"),
             t.cards("id", "name", "url", "idList"),
@@ -134,18 +259,26 @@
           const rows = [];
           for (const card of cards || []) {
             const timerData = await readCardTimerData(card.id);
-            const totalTime = Number(timerData?.totalTime || 0);
-            const estimatedTime = Number(timerData?.estimatedTime || 0);
+            const reportEntries = getReportEntries(timerData, range);
+            const totalTime = range.isActive
+              ? reportEntries.reduce(
+                  (sum, entry) => sum + Number(entry?.duration || 0),
+                  0,
+                )
+              : Number(timerData?.totalTime || 0);
+            const estimatedTime = range.isActive
+              ? 0
+              : Number(timerData?.estimatedTime || 0);
             const checklistTotals = Object.values(
               timerData?.checklistTotals || {},
             );
-            const checklistEntries = checklistTotals.reduce(
-              (sum, item) => sum + Number(item?.entryCount || 0),
-              0,
-            );
-            const recentEntries = Array.isArray(timerData?.recentEntries)
-              ? timerData.recentEntries.length
-              : 0;
+            const checklistEntries = range.isActive
+              ? 0
+              : checklistTotals.reduce(
+                  (sum, item) => sum + Number(item?.entryCount || 0),
+                  0,
+                );
+            const recentEntries = reportEntries.length;
 
             if (totalTime <= 0 && estimatedTime <= 0) continue;
 
@@ -155,14 +288,15 @@
               listName: listNames.get(card.idList) || "",
               totalTime,
               estimatedTime,
-              delta: totalTime - estimatedTime,
+              delta: range.isActive ? 0 : totalTime - estimatedTime,
               entryCount: Math.max(recentEntries, checklistEntries),
             });
           }
 
           rows.sort((a, b) => b.totalTime - a.totalTime);
           reportRows = rows;
-          renderReport(rows);
+          currentRange = range;
+          renderReport(rows, range);
         } catch (error) {
           elements.status.textContent = "Could not load report data.";
         } finally {
@@ -171,7 +305,7 @@
         }
       };
 
-      const renderReport = (rows) => {
+      const renderReport = (rows, range = { isActive: false }) => {
         const totalTime = rows.reduce((sum, row) => sum + row.totalTime, 0);
         const totalEstimate = rows.reduce(
           (sum, row) => sum + row.estimatedTime,
@@ -180,19 +314,24 @@
 
         elements.summaryCards.textContent = rows.length;
         elements.summaryTime.textContent = formatReportDuration(totalTime);
-        elements.summaryEstimate.textContent =
-          formatReportDuration(totalEstimate);
-        elements.summaryDelta.textContent = formatSignedDuration(
-          totalTime - totalEstimate,
-        );
+        elements.summaryEstimate.textContent = range.isActive
+          ? "n/a"
+          : formatReportDuration(totalEstimate);
+        elements.summaryDelta.textContent = range.isActive
+          ? "n/a"
+          : formatSignedDuration(totalTime - totalEstimate);
 
         if (!rows.length) {
-          elements.status.textContent = "No tracked time found on visible cards.";
+          elements.status.textContent = range.isActive
+            ? "No dated entries found in this range. Older aggregate totals cannot be split by date."
+            : "No tracked time found on visible cards.";
           elements.rows.innerHTML = "";
           return;
         }
 
-        elements.status.textContent = "";
+        elements.status.textContent = range.isActive
+          ? "Range report uses dated recent/manual entries only."
+          : "";
         elements.exportCsv.disabled = false;
         elements.rows.innerHTML = rows
           .map(
@@ -203,8 +342,8 @@
                 </td>
                 <td>${escapeHtml(row.listName)}</td>
                 <td class="number">${escapeHtml(formatReportDuration(row.totalTime))}</td>
-                <td class="number">${escapeHtml(formatReportDuration(row.estimatedTime))}</td>
-                <td class="number ${row.delta > 0 ? "over" : "under"}">${escapeHtml(formatSignedDuration(row.delta))}</td>
+                <td class="number">${range.isActive ? "n/a" : escapeHtml(formatReportDuration(row.estimatedTime))}</td>
+                <td class="number ${row.delta > 0 ? "over" : "under"}">${range.isActive ? "n/a" : escapeHtml(formatSignedDuration(row.delta))}</td>
                 <td class="number">${escapeHtml(row.entryCount)}</td>
               </tr>
             `,
@@ -215,6 +354,7 @@
       const csvValue = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
 
       const exportCsv = () => {
+        const range = currentRange || { isActive: false };
         const header = [
           "Card",
           "List",
@@ -233,9 +373,9 @@
               row.listName,
               formatReportDuration(row.totalTime),
               row.totalTime,
-              formatReportDuration(row.estimatedTime),
-              row.estimatedTime,
-              formatSignedDuration(row.delta),
+              range.isActive ? "n/a" : formatReportDuration(row.estimatedTime),
+              range.isActive ? "n/a" : row.estimatedTime,
+              range.isActive ? "n/a" : formatSignedDuration(row.delta),
               row.cardUrl,
             ]
               .map(csvValue)
@@ -256,8 +396,59 @@
         URL.revokeObjectURL(url);
       };
 
+      const importManualRows = async () => {
+        const rawLines = elements.importInput.value
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean);
+
+        if (!rawLines.length) {
+          elements.importStatus.textContent = "Nothing to insert.";
+          return;
+        }
+
+        elements.importData.disabled = true;
+        elements.importStatus.textContent = "Inserting...";
+
+        let inserted = 0;
+        let skipped = 0;
+        let failed = 0;
+
+        for (const line of rawLines) {
+          try {
+            const row = parseImportLine(line);
+            if (!row.cardId || !row.totalTime) {
+              failed += 1;
+              continue;
+            }
+
+            const existing = await readCardTimerData(row.cardId);
+            const hasExistingData =
+              Number(existing?.totalTime || 0) > 0 ||
+              Number(existing?.estimatedTime || 0) > 0;
+
+            if (hasExistingData && !elements.importOverwrite.checked) {
+              skipped += 1;
+              continue;
+            }
+
+            await writeCardTimerData(row.cardId, buildInsertedTimerData(row));
+            inserted += 1;
+          } catch (error) {
+            failed += 1;
+          }
+        }
+
+        elements.importStatus.textContent = `${inserted} inserted, ${skipped} skipped, ${failed} failed.`;
+        elements.importData.disabled = false;
+        await buildReport();
+      };
+
       elements.refresh.addEventListener("click", buildReport);
       elements.exportCsv.addEventListener("click", exportCsv);
+      elements.importData.addEventListener("click", importManualRows);
+      elements.dateFrom.addEventListener("change", buildReport);
+      elements.dateTo.addEventListener("change", buildReport);
 
       t.render(buildReport);
     </script>
