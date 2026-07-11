@@ -217,7 +217,10 @@
         if (newChecklists === null) {
           // Not Authorized
           authUI.show();
+          cachedChecklists = [];
+          estimateUI.setChecklists(cachedChecklists);
           checklistUI.render({}, []); // Clear checklists
+          await refresh(); // Card timer history does not require REST authorization.
         } else {
           authUI.hide();
           cachedChecklists = newChecklists;
