@@ -11,14 +11,24 @@ const mockTimerService = {
   getCurrentElapsed: jest.fn(),
 };
 
+const mockStorageService = {
+  getTimerData: jest.fn(),
+};
+
 jest.unstable_mockModule("../../src/services/TimerService.js", () => ({
   default: mockTimerService,
+}));
+
+jest.unstable_mockModule("../../src/services/StorageService.js", () => ({
+  default: mockStorageService,
 }));
 
 // Import after mock
 const { TimerUI } = await import("../../src/ui/TimerUI.js");
 const { default: TimerService } =
   await import("../../src/services/TimerService.js");
+const { default: StorageService } =
+  await import("../../src/services/StorageService.js");
 
 describe("TimerUI", () => {
   let t;
@@ -52,6 +62,10 @@ describe("TimerUI", () => {
 
     // Clear mocks
     jest.clearAllMocks();
+    StorageService.getTimerData.mockResolvedValue({
+      state: TIMER_STATE.IDLE,
+      currentEntry: null,
+    });
 
     // Initialize UI
     timerUI = new TimerUI(t, elements);
@@ -89,27 +103,61 @@ describe("TimerUI", () => {
     expect(elements.description.value).toBe("Test Task");
   });
 
-  test("clicking toggle calls startTimer when idle", async () => {
+  test("clicking toggle calls startTimer when storage is idle", async () => {
     // Setup initial state (idle)
     elements.btnToggle.classList.remove("btn-toggle--running");
     TimerService.startTimer.mockResolvedValue({ success: true });
 
-    // Click
-    elements.btnToggle.click();
+    await timerUI._handleToggle();
 
     expect(TimerService.startTimer).toHaveBeenCalledWith(t);
   });
 
-  test("clicking toggle calls stopTimer when running", async () => {
+  test("clicking toggle calls stopTimer when storage is running", async () => {
     // Setup initial state (running)
-    elements.btnToggle.classList.add("btn-toggle--running");
+    StorageService.getTimerData.mockResolvedValue({
+      state: TIMER_STATE.RUNNING,
+      currentEntry: { startTime: Date.now() - 1000, pausedDuration: 0 },
+    });
     elements.description.value = "My Description";
     TimerService.stopTimer.mockResolvedValue({ success: true });
 
-    // Click
-    elements.btnToggle.click();
+    await timerUI._handleToggle();
 
     expect(TimerService.stopTimer).toHaveBeenCalledWith(t, "My Description");
+  });
+
+  test("clicking visible start stops timer when storage is already running", async () => {
+    elements.btnToggle.classList.remove("btn-toggle--running");
+    elements.btnText.textContent = "Start";
+    StorageService.getTimerData.mockResolvedValue({
+      state: TIMER_STATE.RUNNING,
+      currentEntry: { startTime: Date.now() - 1000, pausedDuration: 0 },
+    });
+    TimerService.stopTimer.mockResolvedValue({ success: true });
+
+    await timerUI._handleToggle();
+
+    expect(TimerService.startTimer).not.toHaveBeenCalled();
+    expect(TimerService.stopTimer).toHaveBeenCalledWith(t, "");
+  });
+
+  test("disables toggle while timer action is in progress", async () => {
+    let resolveStart;
+    TimerService.startTimer.mockReturnValue(
+      new Promise((resolve) => {
+        resolveStart = resolve;
+      }),
+    );
+
+    const promise = timerUI._handleToggle();
+
+    expect(elements.btnToggle.disabled).toBe(true);
+
+    resolveStart({ success: true });
+    await promise;
+
+    expect(elements.btnToggle.disabled).toBe(false);
   });
 
   test("alerts on timer error", async () => {

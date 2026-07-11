@@ -6,12 +6,14 @@
 import { TIMER_STATE } from "../utils/constants.js";
 import { formatDuration } from "../utils/formatTime.js";
 import TimerService from "../services/TimerService.js";
+import StorageService from "../services/StorageService.js";
 
 export class TimerUI {
   constructor(t, elements, options = {}) {
     this.t = t;
     this.elements = elements;
     this.onRefresh = options.onRefresh;
+    this.isBusy = false;
     // Expected elements:
     // display, btnToggle, btnText, iconPlay, iconStop, description, total,
     // storageStatus, storageFill, storageText
@@ -28,10 +30,16 @@ export class TimerUI {
   }
 
   async _handleToggle() {
-    const isRunning = this.elements.btnToggle.classList.contains(
-      "btn-toggle--running",
-    );
+    if (this.isBusy) return;
+
+    this.isBusy = true;
+    if (this.elements.btnToggle) this.elements.btnToggle.disabled = true;
+
     try {
+      const timerData = await StorageService.getTimerData(this.t);
+      const isRunning =
+        timerData.state === TIMER_STATE.RUNNING && timerData.currentEntry;
+
       let result;
       if (isRunning) {
         const description = this.elements.description.value.trim();
@@ -44,12 +52,18 @@ export class TimerUI {
       }
 
       if (result.success && this.onRefresh) {
-        this.onRefresh();
+        await this.onRefresh();
       } else if (!result.success) {
+        if (result.data) {
+          this.update(result.data);
+        }
         alert(`Timer action failed: ${result.error}`);
       }
     } catch (error) {
       alert(`Timer error: ${error.message}`);
+    } finally {
+      this.isBusy = false;
+      if (this.elements.btnToggle) this.elements.btnToggle.disabled = false;
     }
   }
 
