@@ -90,8 +90,6 @@
     <script src="https://p.trellocdn.com/power-up.min.js"></script>
     <script type="module">
       import { AppConfig } from "../src/config/AppConfig.js";
-      import { formatDuration } from "../src/utils/formatTime.js";
-
       const t = TrelloPowerUp.iframe({
         appKey: AppConfig.APP_KEY,
         appName: AppConfig.APP_NAME,
@@ -125,12 +123,18 @@
           .replace(/"/g, "&quot;")
           .replace(/'/g, "&#039;");
 
-      const formatReportDuration = (ms) =>
-        formatDuration(Math.max(0, ms || 0), {
-          compact: true,
-          showSeconds: false,
-          showDays: true,
-        });
+      const formatReportDuration = (ms) => {
+        const safeMs = Math.max(0, Number(ms) || 0);
+        const totalMinutes = Math.floor(safeMs / (60 * 1000));
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+      };
+
+      const formatDecimalHours = (ms) => {
+        const hours = Math.max(0, Number(ms) || 0) / (60 * 60 * 1000);
+        return Number(hours.toFixed(4)).toString();
+      };
 
       const formatSignedDuration = (ms) => {
         if (!ms) return "0m";
@@ -308,7 +312,6 @@
           elements.status.textContent = "Could not load report data.";
         } finally {
           elements.refresh.disabled = false;
-          t.sizeTo("body").catch(() => {});
         }
       };
 
@@ -392,7 +395,7 @@
           "Time",
           "Card name",
           "List",
-          "Tracked",
+          "Tracked hours",
           "Description",
         ];
         const lines = [
@@ -404,7 +407,7 @@
               formatEntryTimeRange(entry),
               entry.cardName,
               entry.listName,
-              formatReportDuration(entry.duration),
+              formatDecimalHours(entry.duration),
               entry.description,
             ]
               .map(csvValue)
