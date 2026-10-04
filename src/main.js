@@ -41,7 +41,7 @@ TrelloPowerUp.initialize(
           callback: (buttonT) =>
             buttonT.modal({
               title: "Time Report",
-              url: buttonT.signUrl("./views/report.html?v=2"),
+              url: buttonT.signUrl("./views/report.html?v=3"),
               fullscreen: true,
             }),
         },

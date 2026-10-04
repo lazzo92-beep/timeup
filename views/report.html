@@ -78,6 +78,7 @@
               <th>Card</th>
               <th>List</th>
               <th>Description</th>
+              <th>User</th>
               <th class="number">Tracked</th>
             </tr>
           </thead>
@@ -90,6 +91,7 @@
     <script src="https://p.trellocdn.com/power-up.min.js"></script>
     <script type="module">
       import { AppConfig } from "../src/config/AppConfig.js";
+      import { getBoardMembers } from "../src/services/TrelloService.js";
       const t = TrelloPowerUp.iframe({
         appKey: AppConfig.APP_KEY,
         appName: AppConfig.APP_NAME,
@@ -230,11 +232,18 @@
 
         try {
           const range = getDateRange();
-          const [board, cards, listNames] = await Promise.all([
+          const [board, cards, listNames, members] = await Promise.all([
             t.board("name"),
             t.cards("id", "name", "url", "idList"),
             buildListNameMap(),
+            getBoardMembers(t),
           ]);
+          const memberNames = new Map(
+            members.map((member) => [
+              member.id,
+              member.fullName || member.username || member.id,
+            ]),
+          );
 
           elements.boardName.textContent = board?.name || "Current board";
 
@@ -274,6 +283,7 @@
                 endTime: Number(entry?.endTime || 0),
                 duration: Number(entry?.duration || 0),
                 description: entry?.description || "",
+                user: memberNames.get(entry?.memberId) || entry?.memberId || "Unknown",
               });
             }
 
@@ -286,6 +296,7 @@
                 endTime: null,
                 duration: totalTime,
                 description: "Aggregate total (no dated entries)",
+                user: "Unknown",
               });
             }
 
@@ -378,12 +389,13 @@
                     </td>
                     <td>${escapeHtml(entry.listName)}</td>
                     <td>${escapeHtml(entry.description)}</td>
+                    <td>${escapeHtml(entry.user)}</td>
                     <td class="number">${escapeHtml(formatReportDuration(entry.duration))}</td>
                   </tr>
                 `,
               )
               .join("")
-          : `<tr><td colspan="6">No dated entries available for this report.</td></tr>`;
+          : `<tr><td colspan="7">No dated entries available for this report.</td></tr>`;
       };
 
       const csvValue = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
@@ -397,6 +409,7 @@
           "List",
           "Tracked hours",
           "Description",
+          "User",
         ];
         const lines = [
           header.map(csvValue).join(","),
@@ -409,6 +422,7 @@
               entry.listName,
               formatDecimalHours(entry.duration),
               entry.description,
+              entry.user,
             ]
               .map(csvValue)
               .join(","),
