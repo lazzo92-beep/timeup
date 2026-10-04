@@ -3,9 +3,10 @@
  */
 import { jest, describe, test, expect, beforeEach, afterEach } from "@jest/globals";
 import { readFileSync } from "node:fs";
+import { URL as NodeURL } from "node:url";
 import { getBoardMembers } from "../../src/services/TrelloService.js";
 
-const html = readFileSync(new URL("../../views/report.html", import.meta.url), "utf8");
+const html = readFileSync(new NodeURL("../../views/report.html", import.meta.url), "utf8");
 // Execute the page's actual report and export handlers with a mocked Trello SDK.
 const script = html.match(/<script type="module">([\s\S]*?)<\/script>/)[1]
   .replace(/^\s*import .*;$/gm, "");
