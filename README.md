@@ -37,7 +37,7 @@ TimeUp enables seamless time tracking directly within your Trello workflow. Trac
 
 - **Board report button**: Open a report from the Trello board header
 - **Card totals**: Review tracked time, estimates, and over/under budget by card
-- **CSV export**: Download a billing-friendly spreadsheet source
+- **CSV export**: Download a billing-friendly spreadsheet source including the user recorded on each time entry
 
 ---
 
@@ -95,6 +95,8 @@ TimeUp enables seamless time tracking directly within your Trello workflow. Trac
 2. Click **Time Report** in the board header
 3. Review totals by visible card
 4. Click **Export CSV** to download a billing report source
+
+The Work Log and CSV include a **User** column resolved from each entry's saved member ID. If the member is no longer available on the board, their ID is shown instead. Older entries without a member ID and aggregate totals show **Unknown**.
 
 ---
 
