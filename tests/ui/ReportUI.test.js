@@ -5,6 +5,7 @@ import { jest, describe, test, expect, beforeEach, afterEach } from "@jest/globa
 import { readFileSync } from "node:fs";
 import { URL as NodeURL } from "node:url";
 import { getBoardMembers } from "../../src/services/TrelloService.js";
+import StorageService from "../../src/services/StorageService.js";
 
 const html = readFileSync(new NodeURL("../../views/report.html", import.meta.url), "utf8");
 // Execute the page's actual report and export handlers with a mocked Trello SDK.
@@ -38,8 +39,8 @@ describe("Time report user attribution", () => {
     URL.createObjectURL = jest.fn(() => "blob:report");
     URL.revokeObjectURL = jest.fn();
     download = jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-    new Function("AppConfig", "getBoardMembers", "TrelloPowerUp", script)(
-      {}, getBoardMembers, { iframe: () => t },
+    new Function("AppConfig", "getBoardMembers", "StorageService", "TrelloPowerUp", script)(
+      {}, getBoardMembers, StorageService, { iframe: () => t },
     );
   });
 

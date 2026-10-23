@@ -92,6 +92,7 @@
     <script type="module">
       import { AppConfig } from "../src/config/AppConfig.js";
       import { getBoardMembers } from "../src/services/TrelloService.js";
+      import StorageService from "../src/services/StorageService.js";
       const t = TrelloPowerUp.iframe({
         appKey: AppConfig.APP_KEY,
         appName: AppConfig.APP_NAME,
@@ -217,11 +218,7 @@
       };
 
       const readCardTimerData = async (cardId) => {
-        try {
-          return await t.get(cardId, "shared", "timerData", null);
-        } catch (error) {
-          return null;
-        }
+        return StorageService.getTimerData(t, cardId);
       };
 
       const buildReport = async () => {

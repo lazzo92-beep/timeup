@@ -1,6 +1,7 @@
 import { STORAGE_KEYS, STORAGE_SCOPES, DEFAULTS } from "../utils/constants.js";
+import { encodeTimerData, decodeTimerData } from "../utils/timerStorageCodec.js";
 
-const STORAGE_LIMIT = 4096; // Trello's per-key character limit
+const STORAGE_LIMIT = 4096; // Card scope/visibility limit, including all keys.
 
 /**
  * Gets data from Trello storage with error handling.
@@ -101,14 +102,13 @@ export const removeData = async (t, scope, visibility, key) => {
  * @param {Object} t - Trello Power-Up client instance
  * @returns {Promise<Object>} Timer data
  */
-export const getTimerData = async (t) => {
-  const timerData = await getData(
-    t,
-    "card",
+export const getTimerData = async (t, scope = "card") => {
+  const storedData = await t.get(
+    scope,
     STORAGE_SCOPES.CARD_SHARED,
     STORAGE_KEYS.TIMER_DATA,
-    DEFAULTS.TIMER_DATA,
   );
+  const timerData = await decodeTimerData(storedData);
 
   // Ensure structure is valid
   return {
@@ -124,13 +124,21 @@ export const getTimerData = async (t) => {
  * @returns {Promise<{success: boolean, size?: number, error?: string}>}
  */
 export const setTimerData = async (t, timerData) => {
-  return await setData(
-    t,
-    "card",
-    STORAGE_SCOPES.CARD_SHARED,
-    STORAGE_KEYS.TIMER_DATA,
-    timerData,
-  );
+  try {
+    const encoded = await encodeTimerData(timerData);
+    const existing = await t.get("card", STORAGE_SCOPES.CARD_SHARED);
+    const size = JSON.stringify({ ...existing, [STORAGE_KEYS.TIMER_DATA]: encoded }).length;
+    if (size > STORAGE_LIMIT) {
+      return {
+        success: false,
+        error: "Card time history is full, even after compression. Export a backup before removing any entries. Nothing was saved or deleted.",
+        size,
+      };
+    }
+    return await setData(t, "card", STORAGE_SCOPES.CARD_SHARED, STORAGE_KEYS.TIMER_DATA, encoded);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
 };
 
 // =============================================================================

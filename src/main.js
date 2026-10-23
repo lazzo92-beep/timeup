@@ -41,7 +41,7 @@ TrelloPowerUp.initialize(
           callback: (buttonT) =>
             buttonT.modal({
               title: "Time Report",
-              url: buttonT.signUrl("./views/report.html?v=3"),
+              url: buttonT.signUrl("./views/report.html?v=4"),
               fullscreen: true,
             }),
         },
@@ -120,7 +120,7 @@ TrelloPowerUp.initialize(
         icon: ICON_TIMER,
         content: {
           type: "iframe",
-          url: t.signUrl("./views/card-section.html?v=4"),
+          url: t.signUrl("./views/card-section.html?v=5"),
           height: 180,
         },
       };
